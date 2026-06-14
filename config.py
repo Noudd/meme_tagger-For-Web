@@ -24,9 +24,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # 大语言模型 API 配置（用于图片标签分析）
-    LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-    LLM_API_BASE = os.environ.get("LLM_API_BASE", "")
-    LLM_MODEL = os.environ.get("LLM_MODEL", "")
+    LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-your-api-key")
+    LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1")
+    LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
     # 并发处理图片的工作线程数
     MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "3"))

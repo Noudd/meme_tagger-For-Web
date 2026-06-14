@@ -106,6 +106,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 "app:create_app()"
 
 ## 声明
 
-更多信息请查看[CODE_WIKI.md](CODE_WIKI.md)
+更多信息请查看[CODE_WIKI.md](CODE_WIKI.md)<br>
+<br>
 本项目仅供学习和研究使用。
 

@@ -104,6 +104,7 @@ pip install gunicorn
 gunicorn -w 4 -b 0.0.0.0:5000 "app:create_app()"
 ```
 
-## 特别声明
+## 声明
 
 本项目仅供学习和研究使用。
+更多信息请查看CODE_WIKI.md

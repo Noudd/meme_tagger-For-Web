@@ -183,45 +183,94 @@ def create_app(config_class=Config) -> Flask
 
 **职责**：定义数据库表结构和 ORM 模型
 
-#### 3.1 Meme 模型
+#### 3.1 MemeStatus 常量类
 
-**表名**：`memes`
+**用途**：定义 Meme 处理状态的整数值和标签映射
+
+```python
+class MemeStatus:
+    PENDING = 0      # 待处理
+    PROCESSING = 1   # 处理中
+    COMPLETED = 2    # 已完成
+    ERROR = 3        # 错误
+    
+    LABELS = {0: "pending", 1: "processing", 2: "completed", 3: "error"}
+    VALUES = {"pending": 0, "processing": 1, "completed": 2, "error": 3}
+```
+
+**特点**：
+- 数据库存储整数值（0-3），提升查询性能
+- 提供双向映射：整数→字符串标签、字符串标签→整数
+- API 响应和前端展示使用字符串标签
+
+---
+
+#### 3.2 Meme 模型
+
+**表名**：`Memes`
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
-| `id` | Integer | 主键 | 自增 ID |
-| `file_path` | String(1024) | 唯一索引 | 文件绝对路径 |
-| `file_name` | String(512) | 非空 | 原始文件名 |
-| `md5_hash` | String(32) | 非空 | 文件 MD5 哈希值 |
-| `status` | String(20) | 非空，默认 `"pending"`，索引 | 处理状态 |
-| `error_message` | Text | 可空 | 错误信息 |
-| `created_at` | DateTime | 默认 UTC 当前时间 | 创建时间 |
-| `updated_at` | DateTime | 自动更新 | 最后更新时间 |
+| `Id` | Text | 主键 | UUID 十六进制字符串（32位） |
+| `FilePath` | Text | 非空 | 文件绝对路径 |
+| `FileName` | Text | 非空 | 原始文件名 |
+| `Md5Hash` | Text | 非空，唯一索引 | 文件 MD5 哈希值 |
+| `Status` | Integer | 非空，默认 `0`，索引 | 处理状态（0-3） |
+| `CreatedAt` | Text | 非空 | 创建时间（ISO 格式字符串） |
 
-**关系**：一对多关联 `Tag` 模型（`cascade="all, delete-orphan"`）
+**关系**：一对多关联 `MemeTag` 模型（`cascade="all, delete-orphan"`）
 
-**状态枚举**：
-- `pending`：待处理
-- `processing`：处理中
-- `completed`：已完成
-- `error`：错误
+**状态枚举**（整数）：
+- `0`：待处理（pending）
+- `1`：处理中（processing）
+- `2`：已完成（completed）
+- `3`：错误（error）
 
 **序列化方法**：`to_dict()` → 返回包含所有字段和关联标签的字典
 
-#### 3.2 Tag 模型
+**特点**：
+- 主键使用 UUID（`uuid.uuid4().hex`），全局唯一
+- 时间字段使用 ISO 格式字符串（`datetime.utcnow().isoformat()`）
+- 通过 `MemeTag` 关联表实现与 `Tag` 的多对多关系
 
-**表名**：`tags`
+---
+
+#### 3.3 Tag 模型
+
+**表名**：`Tags`
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
-| `id` | Integer | 主键 | 自增 ID |
-| `name` | String(256) | 非空 | 标签名称 |
-| `confidence` | Float | 非空，默认 `0.0` | 置信度（0.0-1.0） |
-| `meme_id` | Integer | 外键，非空 | 关联的 Meme ID |
+| `Id` | Integer | 主键，自增 | 标签 ID |
+| `Name` | Text | 非空，唯一 | 标签名称（全局唯一） |
+| `Type` | Integer | 非空，默认 `0` | 标签类型（预留扩展） |
 
-**关系**：多对一反向关联 `Meme` 模型
+**关系**：一对多关联 `MemeTag` 模型（`cascade="all, delete-orphan"`）
 
-**序列化方法**：`to_dict()` → 返回标签信息的字典
+**特点**：
+- 独立标签表，可被多个 Meme 共享
+- `Name` 字段全局唯一，避免重复标签
+- `Type` 字段预留扩展（当前未使用）
+
+---
+
+#### 3.4 MemeTag 关联模型
+
+**表名**：`MemeTags`
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `MemeId` | Text | 外键，主键 | 关联的 Meme ID |
+| `TagId` | Integer | 外键，主键 | 关联的 Tag ID |
+
+**关系**：
+- 多对一关联 `Meme` 模型
+- 多对一关联 `Tag` 模型
+
+**特点**：
+- 复合主键：`MemeId` + `TagId`
+- 外键约束：`ON DELETE CASCADE`（级联删除）
+- 实现 Meme 与 Tag 的多对多关系
 
 ---
 
@@ -370,6 +419,9 @@ def create_app(config_class=Config) -> Flask
 
 **端点**：`DELETE /api/memes/<meme_id>`
 
+**路径参数**：
+- `meme_id`：Meme UUID 字符串（32位十六进制）
+
 **响应**：
 ```json
 {
@@ -496,6 +548,10 @@ def analyze_image(file_path: Path) -> list[dict[str, Any]]
 
 **返回**：标签字典列表，格式为 `[{"name": "tag_name", "confidence": 0.95}, ...]`
 
+**说明**：
+- 返回的 `confidence` 字段仅用于日志记录和调用方过滤，**不持久化到数据库**
+- 最终标签通过 `MemeTag` 关联表写入数据库，仅保存标签名称
+
 **工作流程**：
 1. 编码图片为 Base64
 2. 构建 LLM API 请求体
@@ -565,13 +621,33 @@ def _parse_response(text: str) -> list[dict[str, Any]]
 
 #### 5.3 数据库服务 (`app/services/db_service.py`)
 
-##### 5.3.1 获取或创建 Meme
+##### 5.3.1 获取或创建标签（内部函数）
+
+```python
+def _get_or_create_tag(name: str, tag_type: int = 0) -> Tag
+```
+
+**功能**：根据标签名称查找已有 Tag，不存在则创建新的 Tag 记录
+
+**参数**：
+- `name`：标签名称
+- `tag_type`：标签类型（默认 0）
+
+**返回**：`Tag` 模型实例
+
+**特点**：
+- 内部辅助函数，供 `add_tags_to_meme` 调用
+- 使用 `flush()` 而非 `commit()`，确保在事务中获取自增 ID
+
+---
+
+##### 5.3.2 获取或创建 Meme
 
 ```python
 def get_or_create_meme(file_path: Path, md5_hash: str) -> Meme
 ```
 
-**功能**：根据文件路径查找已有 Meme 记录，不存在则创建新的 `pending` 状态记录
+**功能**：根据 MD5 哈希值查找已有 Meme 记录，不存在则创建新的 `pending` 状态记录
 
 **参数**：
 - `file_path`：文件路径
@@ -579,40 +655,57 @@ def get_or_create_meme(file_path: Path, md5_hash: str) -> Meme
 
 **返回**：`Meme` 模型实例
 
----
-
-##### 5.3.2 更新 Meme 状态
-
-```python
-def update_meme_status(
-    meme_id: int, status: str, error_message: Optional[str] = None
-) -> None
-```
-
-**功能**：更新指定 Meme 的处理状态，可选附带错误信息
-
-**参数**：
-- `meme_id`：Meme ID
-- `status`：新状态（`pending`/`processing`/`completed`/`error`）
-- `error_message`：错误信息（可选）
+**特点**：
+- 使用 `Md5Hash` 字段查询（而非 `file_path`），实现文件去重
+- 新创建的 Meme 状态为 `MemeStatus.PENDING`（整数 0）
 
 ---
 
-##### 5.3.3 添加标签
+##### 5.3.3 更新 Meme 状态
 
 ```python
-def add_tags_to_meme(meme_id: int, tags: list[dict[str, Any]]) -> None
+def update_meme_status(meme_id: str, status: int) -> None
 ```
 
-**功能**：为指定 Meme 批量写入标签（先清除旧标签再写入新标签，实现覆盖更新）
+**功能**：更新指定 Meme 的处理状态
 
 **参数**：
-- `meme_id`：Meme ID
+- `meme_id`：Meme UUID 字符串
+- `status`：新状态（整数：0=待处理、1=处理中、2=已完成、3=错误）
+
+**特点**：
+- 状态参数使用 `MemeStatus` 常量（如 `MemeStatus.PROCESSING`）
+- 无 `error_message` 参数（已移除该字段）
+
+---
+
+##### 5.3.4 添加标签
+
+```python
+def add_tags_to_meme(meme_id: str, tags: list[dict[str, Any]]) -> None
+```
+
+**功能**：为指定 Meme 批量写入标签
+
+**参数**：
+- `meme_id`：Meme UUID 字符串
 - `tags`：标签字典列表，格式为 `[{"name": "tag_name", "confidence": 0.95}, ...]`
 
+**工作流程**：
+1. 清除该 Meme 的所有旧 `MemeTag` 关联
+2. 遍历标签列表：
+   - 调用 `_get_or_create_tag` 获取或创建 `Tag` 记录
+   - 创建 `MemeTag` 关联记录
+3. 提交事务
+
+**特点**：
+- AI 返回的 `confidence` 字段**不持久化**，仅用于日志记录
+- 标签通过 `MemeTag` 关联表实现多对多关系
+- 实现覆盖更新（先删后增）
+
 ---
 
-##### 5.3.4 分页查询
+##### 5.3.5 分页查询
 
 ```python
 def get_all_memes(
@@ -628,7 +721,7 @@ def get_all_memes(
 **参数**：
 - `page`：页码（默认 1）
 - `per_page`：每页数量（默认 20）
-- `status_filter`：状态筛选（可选）
+- `status_filter`：状态筛选（字符串，如 `"pending"`）
 - `search`：关键词搜索（可选，匹配文件名或标签名）
 
 **返回**：包含分页信息的字典：
@@ -642,26 +735,33 @@ def get_all_memes(
 }
 ```
 
-**排序**：按 `updated_at` 降序
+**特点**：
+- 状态筛选：通过 `MemeStatus.VALUES` 将字符串转换为整数
+- 标签搜索：通过子查询关联 `MemeTag` 和 `Tag` 表
+- 排序：按 `CreatedAt` 降序
 
 ---
 
-##### 5.3.5 删除 Meme
+##### 5.3.6 删除 Meme
 
 ```python
-def delete_meme(meme_id: int) -> bool
+def delete_meme(meme_id: str) -> bool
 ```
 
-**功能**：删除指定 Meme 记录及其关联的 Tag 记录（级联删除）
+**功能**：删除指定 Meme 记录，级联删除其 `MemeTag` 关联
 
 **参数**：
-- `meme_id`：Meme ID
+- `meme_id`：Meme UUID 字符串
 
 **返回**：是否删除成功
 
+**特点**：
+- 外键约束 `ON DELETE CASCADE` 自动删除关联的 `MemeTag` 记录
+- `Tag` 记录不会被删除（独立标签表）
+
 ---
 
-##### 5.3.6 状态统计
+##### 5.3.7 状态统计
 
 ```python
 def get_meme_count_by_status() -> dict[str, int]
@@ -669,7 +769,7 @@ def get_meme_count_by_status() -> dict[str, int]
 
 **功能**：按处理状态分组统计 Meme 数量
 
-**返回**：`{status: count}` 字典，例如：
+**返回**：`{status_label: count}` 字典，例如：
 ```python
 {
     "pending": 5,
@@ -679,6 +779,11 @@ def get_meme_count_by_status() -> dict[str, int]
 }
 ```
 
+**特点**：
+- 数据库查询返回整数状态值
+- 通过 `MemeStatus.LABELS` 映射为字符串标签
+- 键为字符串（如 `"pending"`），值为整数
+
 ---
 
 ### 6. 后台任务管理 (`app/tasks/worker.py`)
@@ -687,13 +792,19 @@ def get_meme_count_by_status() -> dict[str, int]
 
 #### 6.1 TaskStatus 常量类
 
+**用途**：定义 TaskManager 内部任务的状态标签（与 MemeStatus 不同）
+
 ```python
 class TaskStatus:
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    ERROR = "error"
+    PENDING = "pending"      # 任务已创建，等待执行
+    RUNNING = "running"      # 任务正在执行
+    COMPLETED = "completed"  # 任务已完成
+    ERROR = "error"          # 任务执行出错
 ```
+
+**特点**：
+- 使用字符串标签（非整数），用于 SSE 进度推送
+- 与 `MemeStatus` 不同：TaskStatus 管理后台任务，MemeStatus 管理图片处理状态
 
 ---
 
@@ -765,13 +876,13 @@ def _process_single_file(self, file_path: Path, task_id: str, app: Flask) -> Non
 **工作流程**：
 1. 计算文件 MD5 哈希值
 2. 在应用上下文中：
-   - 获取或创建 Meme 记录
-   - 更新状态为 `processing`
+   - 获取或创建 Meme 记录（基于 MD5 去重）
+   - 更新状态为 `MemeStatus.PROCESSING`（整数 1）
 3. 调用 `analyze_image` 进行 AI 分析
 4. 在应用上下文中：
-   - 添加标签到 Meme
-   - 更新状态为 `completed`
-5. 异常处理：更新状态为 `error` 并记录错误信息
+   - 添加标签到 Meme（通过 MemeTag 关联表）
+   - 更新状态为 `MemeStatus.COMPLETED`（整数 2）
+5. 异常处理：更新状态为 `MemeStatus.ERROR`（整数 3）
 
 **事务管理**：
 - 使用 `db.session.commit()` 提交事务
@@ -866,62 +977,70 @@ task_manager = TaskManager()
 
 ### 数据库表结构
 
-#### memes 表
+#### Memes 表
 
 ```sql
-CREATE TABLE memes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_path VARCHAR(1024) UNIQUE NOT NULL,
-    file_name VARCHAR(512) NOT NULL,
-    md5_hash VARCHAR(32) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    error_message TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Memes" (
+    "Id" TEXT NOT NULL,
+    "FilePath" TEXT NOT NULL,
+    "FileName" TEXT NOT NULL,
+    "Md5Hash" TEXT NOT NULL,
+    "Status" INTEGER NOT NULL DEFAULT 0,
+    "CreatedAt" TEXT NOT NULL,
+    PRIMARY KEY ("Id")
 );
 
-CREATE INDEX ix_memes_file_path ON memes (file_path);
-CREATE INDEX ix_memes_status ON memes (status);
+CREATE UNIQUE INDEX ix_memes_md5_hash ON "Memes" ("Md5Hash");
+CREATE INDEX ix_memes_status ON "Memes" ("Status");
 ```
 
-#### tags 表
+#### Tags 表
 
 ```sql
-CREATE TABLE tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(256) NOT NULL,
-    confidence FLOAT NOT NULL DEFAULT 0.0,
-    meme_id INTEGER NOT NULL,
-    FOREIGN KEY (meme_id) REFERENCES memes (id) ON DELETE CASCADE
+CREATE TABLE "Tags" (
+    "Id" INTEGER NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Type" INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY ("Id" AUTOINCREMENT)
+);
+
+CREATE UNIQUE INDEX ix_tags_name ON "Tags" ("Name");
+```
+
+#### MemeTags 关联表
+
+```sql
+CREATE TABLE "MemeTags" (
+    "MemeId" TEXT NOT NULL,
+    "TagId" INTEGER NOT NULL,
+    PRIMARY KEY ("MemeId", "TagId"),
+    FOREIGN KEY ("MemeId") REFERENCES "Memes" ("Id") ON DELETE CASCADE,
+    FOREIGN KEY ("TagId") REFERENCES "Tags" ("Id") ON DELETE CASCADE
 );
 ```
 
 ### 关系图
 
 ```
-┌─────────────────┐
-│     memes       │
-├─────────────────┤
-│ id (PK)         │
-│ file_path       │◄───────┐
-│ file_name       │        │
-│ md5_hash        │        │
-│ status          │        │
-│ error_message   │        │
-│ created_at      │        │
-│ updated_at      │        │
-└─────────────────┘        │
-                           │
-                           │ 1:N
-                           │
-┌─────────────────┐        │
-│     tags        │        │
-├─────────────────┤        │
-│ id (PK)         │        │
-│ name            │        │
-│ confidence      │        │
-│ meme_id (FK)    │────────┘
-└─────────────────┘
+┌─────────────────────┐          ┌─────────────────────┐
+│       Memes         │          │        Tags         │
+├─────────────────────┤          ├─────────────────────┤
+│ Id (PK, TEXT/UUID)  │          │ Id (PK, INTEGER)    │
+│ FilePath            │          │ Name (UNIQUE)       │
+│ FileName            │          │ Type                │
+│ Md5Hash (UNIQUE)    │          └──────────┬──────────┘
+│ Status (INTEGER)    │                     │
+│ CreatedAt           │                     │
+└──────────┬──────────┘                     │
+           │                                │
+           │         MemeTags               │
+           │    ┌───────────────────┐       │
+           └───►│ MemeId (FK, PK)   │       │
+                │ TagId  (FK, PK)   │◄──────┘
+                └───────────────────┘
+
+  Memes ──(1:N)── MemeTags ──(N:1)── Tags
+  等价于 Memes ──(M:N)── Tags（通过 MemeTags 关联）
 ```
 
 ---
@@ -1131,11 +1250,15 @@ function renderMemes(memes)
 - 图片预览（点击打开 Lightbox）
 - 文件名
 - 状态徽章
-- 错误信息（如果有）
-- 标签列表（显示置信度）
+- 标签列表（**不显示置信度**）
 - 预览按钮
 - 删除按钮
 - 批量选择复选框
+
+**特点**：
+- Meme ID 为 UUID 字符串（32位），作为字符串处理
+- 标签仅显示名称，不显示置信度（已从数据库移除）
+- 删除操作使用字符串 ID：`deleteMeme('${m.id}')`
 
 ---
 
@@ -1296,7 +1419,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 - **Python**：3.10+
 - **操作系统**：Windows / macOS / Linux
-- **网络**：需要访问 LLM API（阿里云 DashScope）
+- **网络**：需要访问 LLM API
 
 ---
 
@@ -1503,7 +1626,7 @@ print(secrets.token_hex(32))
 
 #### LLM_API_BASE
 
-**用途**：LLM API 基础 URL
+**用途**：LLM API 基础 URL（OpenAI 兼容模式）
 
 **默认值**：`"https://api.openai.com/v1"`
 

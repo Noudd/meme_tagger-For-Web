@@ -123,9 +123,9 @@ def list_memes():
     return jsonify(result)
 
 
-@api_bp.route("/memes/<int:meme_id>", methods=["DELETE"])
-def remove_meme(meme_id: int):
-    """删除指定 ID 的表情包记录及其关联标签"""
+@api_bp.route("/memes/<string:meme_id>", methods=["DELETE"])
+def remove_meme(meme_id: str):
+    """删除指定 ID 的表情包记录，级联删除其 MemeTag 关联"""
     success = delete_meme(meme_id)
     if not success:
         return jsonify({"error": "Meme not found"}), 404

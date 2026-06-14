@@ -14,7 +14,7 @@ from typing import Any
 
 from flask import Flask
 
-from app.models import db
+from app.models import MemeStatus, db
 from app.services.ai_service import analyze_image
 from app.services.db_service import (
     add_tags_to_meme,
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaskStatus:
-    """任务状态常量定义"""
+    """任务状态常量定义（用于 TaskManager 内部任务管理，与 MemeStatus 不同）"""
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -45,9 +45,9 @@ class TaskManager:
 
     def __init__(self) -> None:
         self._executor = ThreadPoolExecutor(max_workers=Config.MAX_WORKERS)
-        self._tasks: dict[str, dict[str, Any]] = {}  # 所有任务的状态数据
-        self._lock = threading.Lock()  # 保护 _tasks 的并发访问锁
-        self._progress_queues: dict[str, queue.Queue[dict[str, Any]]] = {}  # 每个任务的进度消息队列
+        self._tasks: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+        self._progress_queues: dict[str, queue.Queue[dict[str, Any]]] = {}
 
     def create_task(self, file_paths: list[Path], app: Flask) -> str:
         """创建新的打标签任务，提交到线程池执行，返回任务 ID"""
@@ -66,7 +66,6 @@ class TaskManager:
             }
             self._progress_queues[task_id] = queue.Queue[dict[str, Any]]()
 
-        # 将任务提交到线程池异步执行
         self._executor.submit(self._run_task, task_id, file_paths, app)
         return task_id
 
@@ -113,14 +112,14 @@ class TaskManager:
         if md5_hash is None:
             raise OSError(f"Cannot read file: {file_path}")
 
-        meme_id: int | None = None
+        meme_id: str | None = None
 
         with app.app_context():
             try:
                 meme = get_or_create_meme(file_path, md5_hash)
-                meme_id = meme.id
+                meme_id = meme.Id
 
-                update_meme_status(meme_id, "processing")
+                update_meme_status(meme_id, MemeStatus.PROCESSING)
                 db.session.commit()
             except Exception:
                 db.session.rollback()
@@ -132,7 +131,7 @@ class TaskManager:
             with app.app_context():
                 try:
                     if meme_id is not None:
-                        update_meme_status(meme_id, "error", str(e))
+                        update_meme_status(meme_id, MemeStatus.ERROR)
                         db.session.commit()
                 except Exception:
                     db.session.rollback()
@@ -142,7 +141,7 @@ class TaskManager:
             try:
                 if meme_id is not None:
                     add_tags_to_meme(meme_id, tags)
-                    update_meme_status(meme_id, "completed")
+                    update_meme_status(meme_id, MemeStatus.COMPLETED)
                     db.session.commit()
             except Exception:
                 db.session.rollback()

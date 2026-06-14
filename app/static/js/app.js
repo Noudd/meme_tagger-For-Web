@@ -402,16 +402,13 @@ function renderMemes(memes) {
             const tagsHtml = m.tags.length
                 ? m.tags.map(
                     (t) =>
-                        `<span class="badge bg-info me-1 mb-1 tag-badge">${escapeHtml(t.name)} <small class="opacity-75">${(t.confidence * 100).toFixed(0)}%</small></span>`
+                        `<span class="badge bg-info me-1 mb-1 tag-badge">${escapeHtml(t.name)}</span>`
                 ).join("")
                 : '<span class="text-muted small">无标签</span>';
 
             const filePath = m.file_path.replace(/\\/g, "/");
             const escapedPath = filePath.replace(/'/g, "\\'");
             const checked = selectedMemes.has(m.id) ? "checked" : "";
-            const errorMsg = m.error_message
-                ? `<div class="small text-danger mb-1 text-truncate" title="${escapeHtml(m.error_message)}">${escapeHtml(m.error_message)}</div>`
-                : "";
 
             return `
                 <div class="col-md-4 col-lg-3">
@@ -435,7 +432,6 @@ function renderMemes(memes) {
                         <div class="card-body p-2">
                             <div class="small text-truncate mb-1 fw-medium" title="${escapeHtml(filePath)}">${escapeHtml(m.file_name)}</div>
                             <span class="badge bg-${statusBadge} mb-2">${m.status}</span>
-                            ${errorMsg}
                             <div class="mb-2" style="max-height:68px;overflow-y:auto;">${tagsHtml}</div>
                             <div class="d-flex gap-1">
                                 <button class="btn btn-outline-info btn-sm flex-shrink-0" style="width:32px;padding:4px;"
@@ -443,7 +439,7 @@ function renderMemes(memes) {
                                     &#9744;
                                 </button>
                                 <button class="btn btn-outline-danger btn-sm flex-grow-1"
-                                        onclick="deleteMeme(${m.id})">删除</button>
+                                        onclick="deleteMeme('${m.id}')">删除</button>
                             </div>
                         </div>
                     </div>
@@ -453,7 +449,7 @@ function renderMemes(memes) {
 
     document.querySelectorAll(".meme-checkbox").forEach((cb) => {
         cb.addEventListener("change", (e) => {
-            const id = parseInt(e.target.dataset.id);
+            const id = e.target.dataset.id;
             if (e.target.checked) selectedMemes.add(id);
             else selectedMemes.delete(id);
             updateBatchDeleteBtn();

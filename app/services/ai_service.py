@@ -2,6 +2,7 @@
 """
 AI 标签分析服务
 调用大语言模型（LLM）API 对表情包图片进行视觉分析，自动生成分类标签
+返回的标签包含 confidence 字段供调用方过滤，最终通过 MemeTag 关联表写入数据库
 """
 import base64
 import json

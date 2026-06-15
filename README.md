@@ -2,7 +2,7 @@
 
 基于 Flask 的表情包 AI 自动标签生成工具。通过大语言模型（LLM）对表情包进行视觉分析，自动生成分类标签并存储到 SQLite 数据库。
 
-配合命令面板插件[memeSeacher](https://github.com/Noudd/memeSearcher)(仓库暂未公开),可快速查找表情包并复制到剪切板中
+配合命令面板扩展[memeSeacher](https://github.com/Noudd/memeSearcher)(仓库暂未公开),可快速查找表情包并复制到剪切板中
 
 ## 功能特性
 

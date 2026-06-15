@@ -31,13 +31,25 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 克隆项目
+```bash
+git clone https://github.com/Noudd/meme_tagger-For-Web.git
+```
+
+### 2. 进入项目文件夹
+```bash
+cd ./meme_tagger-For-Web
+```
+
+### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量（可选）
+### 4. 配置LLM API
+
+#### 方式一: 通过环境变量配置
 
 ```bash
 # Windows PowerShell
@@ -51,7 +63,14 @@ export LLM_API_BASE="https://api.openai.com/v1"
 export LLM_MODEL="gpt-4o"
 ```
 
-### 3. 启动应用
+#### 方式二: 修改config.py
+```python
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-your-api-key")
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+```
+
+### 5. 启动应用
 
 ```bash
 python run.py
@@ -92,17 +111,6 @@ meme_tagger For Web/
 | `LLM_API_BASE` | `https://api.openai.com/v1` | API 基础 URL |
 | `LLM_MODEL` | `gpt-4o` | 模型名称 |
 | `MAX_WORKERS` | `3` | 并发线程数 |
-
-## 开发
-
-```bash
-# 开发模式（自动重载）
-python run.py
-
-# 生产部署（使用 gunicorn）
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 "app:create_app()"
-```
 
 ## 声明
 

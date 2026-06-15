@@ -1424,10 +1424,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 ### 安装步骤
 
-#### 1. 克隆或下载项目
+#### 1. 克隆项目
 
 ```bash
-cd "meme_tagger For Web"
+git clone https://github.com/Noudd/meme_tagger-For-Web.git
+
+cd ./meme_tagger-For-Web
 ```
 
 #### 2. 创建虚拟环境（推荐）
